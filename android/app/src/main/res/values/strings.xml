@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">finanzas personales</string>
+    <string name="title_activity_main">finanzas personales</string>
+    <string name="package_name">israelalanya.dev</string>
+    <string name="custom_url_scheme">israelalanya.dev</string>
+</resources>
