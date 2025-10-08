@@ -1,22 +1,23 @@
 <template>
   <div>
-    <BarChart v-if="chartData" :data="chartData" :options="options" />
+    <LineChart v-if="chartData" :data="chartData" :options="options" />
   </div>
 </template>
 
 <script setup>
-import { Bar } from 'vue-chartjs'
+import { Line } from 'vue-chartjs'
 import {
   Chart as ChartJS,
   Title,
   Tooltip,
   Legend,
-  BarElement,
+  LineElement,
+  PointElement,
   CategoryScale,
   LinearScale
 } from 'chart.js'
 
-ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale)
+ChartJS.register(Title, Tooltip, Legend, LineElement, PointElement, CategoryScale, LinearScale)
 
 const props = defineProps({
   data: { type: Object, required: true }
@@ -28,5 +29,5 @@ const options = {
 }
 
 const chartData = props.data
-const BarChart = Bar
+const LineChart = Line
 </script>

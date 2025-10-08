@@ -1,212 +1,221 @@
 <template>
-  <div class="prestamos">
-    <h2>🤝 Préstamos y Deudas</h2>
+  <div class="finance-form">
+    <h2>Registrar Préstamo</h2>
 
-    <!-- Formulario -->
-    <form @submit.prevent="addPrestamo">
-      <select v-model="nuevo.tipo" required>
-        <option disabled value="">Selecciona tipo</option>
-        <option value="prestado">Préstamo (yo presto)</option>
-        <option value="deuda">Deuda (yo debo)</option>
+    <form @submit.prevent="guardarPrestamo">
+      <!-- Cuenta -->
+      <select v-model="prestamo.cuenta" required>
+        <option disabled value="">Selecciona cuenta</option>
+        <option v-for="c in configStore.cuentas" :key="c">{{ c }}</option>
       </select>
-      <input v-model="nuevo.persona" placeholder="Nombre de la persona" required />
-      <input type="number" v-model.number="nuevo.monto" placeholder="Monto" required />
-      <input v-model="nuevo.descripcion" placeholder="Descripción" />
-      <input type="date" v-model="nuevo.fecha" required />
+
+      <!-- Medio de Pago -->
+      <select v-model="prestamo.medioPago">
+        <option disabled value="">Selecciona medio de pago</option>
+        <option v-for="m in configStore.mediosPago" :key="m">{{ m }}</option>
+      </select>
+
+      <!-- Moneda -->
+      <select v-model="prestamo.moneda">
+        <option disabled value="">Selecciona moneda</option>
+        <option v-for="m in configStore.monedas" :key="m.nombre">{{ m.nombre }}</option>
+      </select>
+
+      <!-- Persona -->
+      <input 
+        list="personas" 
+        v-model="prestamo.nombrePersona"
+        placeholder="A quién prestaste"
+        required
+      />
+      <datalist id="personas">
+        <option v-for="p in configStore.personas" :key="p">{{ p }}</option>
+      </datalist>
+
+      <!-- Monto -->
+      <input 
+        type="number"
+        v-model.number="prestamo.monto"
+        min="0.01"
+        step="0.01"
+        placeholder="Monto del préstamo"
+        required
+      />
+
+      <!-- Fecha -->
+      <input type="datetime-local" v-model="prestamo.fecha" required />
+
+      <!-- Estado -->
+      <div class="checkbox">
+        <label>
+          <input type="checkbox" v-model="prestamo.pagado" />
+          Marcar como cobrado
+        </label>
+      </div>
+
       <button type="submit" class="btn-primary">Guardar</button>
     </form>
 
     <!-- Lista -->
-    <div v-for="(items, mes) in prestamos" :key="mes" class="mes-block">
-      <h3>{{ mes }}</h3>
+    <div class="lista-movimientos" v-if="prestamos.length">
+      <h3>Préstamos Registrados</h3>
       <ul>
-        <li v-for="(item, i) in items" :key="i">
-          <div>
-            <strong v-if="item.tipo==='prestado'" class="prestado">Presté a</strong>
-            <strong v-else class="deuda">Debo a</strong>
-            {{ item.persona }} - S/ {{ item.monto }}
-            <small>({{ item.descripcion || 'Sin descripción' }})</small>
-            <span :class="['estado', item.estado]">{{ item.estado }}</span>
+        <li v-for="(p, i) in prestamos" :key="p.id">
+          <div class="info">
+            <strong>{{ p.nombrePersona }}</strong>  
+            <span class="badge badge-prestamo">Préstamo</span>
+            <div class="monto">{{ p.moneda }} {{ p.monto.toFixed(2) }}</div>
+            <div class="fecha">{{ formatFecha(p.fecha) }}</div>
+          </div>
+
+          <div class="estado-pago">
+            <i v-if="p.pagado" class="fas fa-check-circle" style="color:#2ecc71"></i>
+            <span v-else style="color:#e74c3c">Pendiente de cobrar</span>
           </div>
 
           <div class="actions">
-            <button class="btn-action" @click="toggleMenu(mes, i)">⋮</button>
-            <div v-if="menu.open && menu.mes===mes && menu.index===i" class="dropdown">
-              <button @click="editPrestamo(mes, i)">✏️ Editar</button>
-              <button @click="toggleEstado(mes, i)">
-                ✅ {{ item.estado==='pendiente' ? 'Marcar pagado' : 'Marcar pendiente' }}
-              </button>
-              <button @click="deletePrestamo(mes, i)">🗑 Eliminar</button>
+            <button class="btn-action" @click="toggleMenu(i)">⋮</button>
+            <div v-if="menu.open && menu.index===i" class="dropdown">
+              <button @click="editar(i)">✏️ Editar</button>
+              <button @click="eliminar(p.id)">🗑 Eliminar</button>
             </div>
           </div>
         </li>
       </ul>
     </div>
-
-    <!-- Botón Reset -->
-    <section>
-      <h3>⚠️ Resetear Préstamos</h3>
-      <button class="btn-danger" @click="resetData">Eliminar todos los préstamos</button>
-    </section>
   </div>
 </template>
 
 <script setup>
-import { reactive } from 'vue'
-import { usePrestamosStore } from '../stores/prestamos'
+import { reactive, computed } from 'vue'
+import { useFinanzasStore } from '../stores/finanzas'
+import { useConfigStore } from '../stores/config'
 
-const store = usePrestamosStore()
-const prestamos = store.prestamos
+const store = useFinanzasStore()
+const configStore = useConfigStore()
 
-const nuevo = reactive({
-  tipo: '',
-  persona: '',
+const prestamos = computed(() => store.movimientos.filter(m => m.tipo === 'prestamo'))
+
+const prestamo = reactive({
+  tipo: 'prestamo',
+  cuenta: '',
+  medioPago: '',
+  moneda: '',
+  nombrePersona: '',
   monto: null,
-  descripcion: '',
-  fecha: new Date().toISOString().slice(0,10)
+  fecha: new Date().toISOString().slice(0,16),
+  pagado: false
 })
 
-const menu = reactive({
-  open: false,
-  mes: null,
-  index: null
-})
+const menu = reactive({ open: false, index: null })
 
-const toggleMenu = (mes, index) => {
-  if (menu.open && menu.mes === mes && menu.index === index) {
-    menu.open = false
-    menu.mes = null
-    menu.index = null
-  } else {
-    menu.open = true
-    menu.mes = mes
-    menu.index = index
-  }
+const toggleMenu = (i) => {
+  menu.open = menu.index !== i || !menu.open
+  menu.index = i
 }
 
-const addPrestamo = () => {
-  if (nuevo.tipo && nuevo.persona && nuevo.monto && nuevo.fecha) {
-    const mes = nuevo.fecha.slice(0,7) // yyyy-mm
-    store.addPrestamo(mes, {
-      ...nuevo,
-      estado: 'pendiente'
-    })
-    nuevo.tipo = ''
-    nuevo.persona = ''
-    nuevo.monto = null
-    nuevo.descripcion = ''
-    nuevo.fecha = new Date().toISOString().slice(0,10)
+const guardarPrestamo = () => {
+  if (!prestamo.monto || prestamo.monto <= 0) {
+    alert('Monto debe ser mayor a 0')
+    return
   }
-}
 
-const editPrestamo = (mes, i) => {
-  const current = prestamos[mes][i]
-  let persona = prompt('Editar persona:', current.persona)
-  if (persona === null) return
-  let monto = parseFloat(prompt('Editar monto:', current.monto))
-  if (isNaN(monto)) return
-  let descripcion = prompt('Editar descripción:', current.descripcion)
-  store.updatePrestamo(mes, i, {
-    ...current,
-    persona,
-    monto,
-    descripcion
+  if (prestamo.nombrePersona && !configStore.personas.includes(prestamo.nombrePersona)) {
+    configStore.personas.push(prestamo.nombrePersona)
+  }
+
+  store.agregarMovimiento({ ...prestamo, id: Date.now() })
+
+  Object.keys(prestamo).forEach(k => {
+    if (k === 'tipo') prestamo[k] = 'prestamo'
+    else if (k === 'fecha') prestamo[k] = new Date().toISOString().slice(0,16)
+    else if (k === 'pagado') prestamo[k] = false
+    else prestamo[k] = ''
   })
+  prestamo.monto = null
+}
+
+const editar = (i) => {
+  const p = prestamos.value[i]
+  Object.keys(prestamo).forEach(k => prestamo[k] = p[k] ?? '')
+  eliminar(p.id)
   menu.open = false
 }
 
-const toggleEstado = (mes, i) => {
-  const current = prestamos[mes][i]
-  current.estado = current.estado === 'pendiente' ? 'pagado' : 'pendiente'
-  store.updatePrestamo(mes, i, { ...current })
-  menu.open = false
-}
-
-const deletePrestamo = (mes, i) => {
-  if (confirm('¿Eliminar este préstamo/deuda?')) {
-    store.removePrestamo(mes, i)
+const eliminar = (id) => {
+  if (confirm('¿Eliminar este préstamo?')) {
+    store.eliminarMovimiento(id)
   }
   menu.open = false
 }
 
-const resetData = () => {
-  if (confirm('⚠️ Esto eliminará todos los préstamos. ¿Seguro?')) {
-    store.resetPrestamos()
-  }
-}
+const formatFecha = (f) => new Date(f).toLocaleString()
 </script>
 
 <style scoped>
-.prestamos {
-  padding: 20px;
-  max-width: 700px;
-  margin: 0 auto;
+.finance-form {
+  max-width: 650px;
+  margin: 20px auto;
+  font-family: sans-serif;
 }
-form { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
-input, select {
-  flex: 1;
-  padding: 8px;
-  border-radius: 6px;
-  border: 1px solid #ccc;
-}
-ul { list-style: none; padding: 0; }
-li { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #eee; }
-.actions { position: relative; }
+form { display:flex; flex-direction:column; gap:10px; margin-bottom:20px; }
+select, input { padding:8px; border-radius:6px; border:1px solid #ccc; }
 .btn-primary {
-  background: #4CAF50;
-  color: white;
-  border: none;
-  padding: 8px 12px;
-  border-radius: 6px;
-  cursor: pointer;
+  padding:10px;
+  border:none;
+  border-radius:6px;
+  background:#42b983;
+  color:white;
+  cursor:pointer;
 }
-.btn-primary:hover { background: #43a047; }
-.btn-danger {
-  background: #e53935;
-  color: white;
-  border: none;
-  padding: 10px 14px;
-  border-radius: 8px;
-  cursor: pointer;
+.btn-primary:hover { opacity:0.9; }
+
+.lista-movimientos { background:#fff; padding:12px; border-radius:10px; box-shadow:0 2px 6px rgba(0,0,0,0.1); }
+.lista-movimientos ul { list-style:none; padding:0; margin:0; }
+.lista-movimientos li { display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid #eee; }
+
+.badge {
+  padding:2px 6px;
+  border-radius:6px;
+  font-size:12px;
+  margin-left:5px;
+  color:white;
 }
-.btn-danger:hover { background: #c62828; }
+.badge-prestamo { background:#1abc9c; }
+
+.info { flex:1; }
+.monto { font-weight:bold; }
+.fecha { font-size:12px; color:#666; }
+
+.actions { position:relative; }
 .btn-action {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: #f5f5f5;
-  border: none;
-  font-size: 18px;
-  cursor: pointer;
+  width:28px;
+  height:28px;
+  border-radius:50%;
+  background:#f5f5f5;
+  border:none;
+  font-size:18px;
+  cursor:pointer;
 }
+.btn-action:hover { background:#e0e0e0; }
 .dropdown {
-  position: absolute;
-  right: 0;
-  top: 36px;
-  background: white;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-  display: flex;
-  flex-direction: column;
-  z-index: 10;
+  position:absolute;
+  right:0;
+  top:30px;
+  background:white;
+  border:1px solid #ccc;
+  border-radius:6px;
+  box-shadow:0 2px 6px rgba(0,0,0,0.15);
+  display:flex;
+  flex-direction:column;
+  z-index:10;
 }
 .dropdown button {
-  padding: 8px 12px;
-  border: none;
-  background: none;
-  text-align: left;
-  cursor: pointer;
+  padding:8px 12px;
+  border:none;
+  background:none;
+  text-align:left;
+  cursor:pointer;
 }
-.dropdown button:hover { background: #f0f0f0; }
-.estado {
-  padding: 2px 6px;
-  border-radius: 6px;
-  font-size: 12px;
-  margin-left: 8px;
-}
-.estado.pendiente { background: #fff3cd; color: #856404; }
-.estado.pagado { background: #d4edda; color: #155724; }
-.prestado { color: #2e7d32; }
-.deuda { color: #c62828; }
+.dropdown button:hover { background:#f0f0f0; }
 </style>
